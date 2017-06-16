@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="img/favicon.ico" mce_href="img/favicon.ico" type="image/x-icon">
+		<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+		<title>MusicPlayer</title>
+		<style type="text/css">
+			*{margin: 0;padding: 0;}
+			body{background: #f6f6f6;}
+			button{vertical-align: super;}
+			.warp{width: 300px;height: 20px;background:aquamarine;display: inline-block;position: relative;}
+			.drag{width: 20px;height:100%;background: chocolate;position: absolute;left: 0;top: 0;}
+			.container ul li{list-style:none;font-size: 12px;color:dimgray;cursor: default;user-select: none;}
+			.container ul li.on{background: #e5e5e5;}
+			
+		</style>
+	</head>
+	<body>
+			<button id="prev">上一首</button>
+			<button id="play">播放</button>
+			<button id="stop">暂停</button>
+			<button id="stopVolome">静音</button>
+			<button id="next">下一首</button>
+			<div id="warp" class="warp">
+				<div id="drag" class="drag">
+					
+				</div>
+			</div>
+			<div class="warp">
+				<div id="volume" class="drag">
+					
+				</div>
+			</div>			
+			<div class="container">
+				<ul id="musiclist">
+					
+				</ul>
+			</div>
+			<p id="time">00:00</p>
+			<p id="time1">00:00</p>
+		<script src="js/dom.js" type="text/javascript" charset="utf-8"></script>
+		<script src="js/list.js" type="text/javascript" charset="utf-8"></script>
+		<script type="text/javascript">
+			var MusicPlayer = (function(){
+				var json = {
+					//音乐索引
+					playIndex:0,
+					len:0,
+					obj:{},
+					//音乐列表
+					musics:[],
+					//播放器
+					audioDom:document.createElement("audio"),
+					//追加音乐到播放器中
+					add:function(musicArr){
+						this.musics = musicArr;
+						this.len = this.musics.length;
+						this.audioDom.src = this.musics[this.playIndex].src;
+						
+						//测试代码
+						this.audioDom.controls = "controls"; 
+						document.body.appendChild(this.audioDom);
+					},
+					//播放 暂停
+					play:function(cb,cb2){
+						if(this.audioDom.paused){
+							this.audioDom.play();
+							
+						}else{
+							this.audioDom.pause();
+						}
+						if(cb)cb.call(this,this.audioDom.paused);
+						if(cb2)cb2.call(this);
+					},
+					//声音
+					volume:function(cb){
+						
+						this.obj.volume = this.audioDom.volume;
+						if(cb)cb.call(this.obj)
+					},
+//					//暂停
+//					stop:function(){
+//						this.audioDom.pause();
+//					},
+					//静音
+					stopVolome:function(callback){
+						this.audioDom.muted = !this.audioDom.muted;
+						if(callback)callback.call(this,this.audioDom.muted);
+					},
+					//下一首
+					next:function(cb){
+						this.playIndex++;
+						if(this.playIndex == this.len)this.playIndex = 0;
+						this.playMain();
+						if(cb)cb(this.playIndex);
+					},
+					//上一首
+					prev:function(cb){
+						this.playIndex--;
+						if(this.playIndex < 0) this.playIndex = this.len - 1;
+						this.playMain();
+						if(cb)cb(this.playIndex);
+					},
+					//播放总控制
+					playMain:function(){
+						this.audioDom.src = this.musics[this.playIndex].src;
+						this.audioDom.play();
+						
+					},
+					//提供给外界通过索引去播放的方法
+					playindex:function(index){
+						var $this = this;
+						try{
+							this.playIndex = index;//把对象中的索引进行同时更新。
+							this.audioDom.src = this.musics[this.playIndex].src;
+							if(this.audioDom.paused){
+								this.audioDom.play();
+							}
+						}catch(e){
+							console.log("loading");
+						}
+						
+						
+					},
+					//播放完成后
+					ended:function(cb){
+						var $this = this;
+						//var obj = {}
+						this.audioDom.onended = function(){
+							$this.playIndex ++;
+							if($this.playIndex == $this.len)$this.playIndex = 0;
+							$this.obj.index = $this.playIndex;
+							if(cb)cb.call($this.obj);
+							//延迟1.2s播放下一首
+							$this.playindex($this.playIndex)
+							
+						}
+					},
+					//当媒介已停止播放但打算继续播放时（比如当媒介暂停已缓冲更多数据）运行脚本
+					waiting:function(){
+						this.audioDom.onwaiting = function(){
+							
+						}
+					},
+					//事件
+					event:function(cb){
+						//总时长 当浏览器预计能够在不停下来进行缓冲的情况下持续播放指定的音频/视频时，会发生 canplaythrough 事件
+						//var obj = {};
+						var $this = this;
+						//声音事件
+						
+						this.audioDom.oncanplaythrough =function(){
+							//总时长
+							$this.obj.totalTime = this.duration;
+							//格式化
+							$this.obj.fTime = json.format(this.duration);
+							$this.obj.volume = this.volume;
+							if(cb)cb.call($this.obj,"play");
+							//console.log(obj.fTime)
+						};
+						//播放时间 ontimeupdate 实时监听
+						this.audioDom.ontimeupdate = function(){
+							//第一首播放时
+							if(!$this.obj.totalTime)$this.obj.totalTime = this.duration;
+							if(!$this.obj.fTime)$this.obj.fTime = json.format(this.duration);
+							//当前播放时长
+							$this.obj.playTime = this.currentTime;
+							//格式化时长
+							$this.obj.fPlayTime = json.format(this.currentTime)
+							//进度
+							$this.obj.precent = (!$this.obj.totalTime ) ? "0%": Math.round(($this.obj.playTime / $this.obj.totalTime)*100) + "%";
+							if(cb)cb.call($this.obj,"time");
+							//console.log(1)
+						};
+					},
+					//拖拽
+					drag:function(dom,mark){
+						var parent = dom.parentElement;
+						var $this = this;
+						parent.onmousedown = function(e){
+							if($this.audioDom.oncanplaythrough){
+							var e = e || event;
+							var x = getXY().x;
+							var l = x - parent.offsetLeft - dom.offsetWidth/2;
+							l = l<=0 ?  0 : l;
+							if(l >= parent.offsetWidth - dom.offsetWidth) l =  parent.offsetWidth - dom.offsetWidth 
+								if(mark == "jindu"){
+									dom.style.left = l +"px";
+									if($this.audioDom.currentTime<$this.obj.totalTime){
+										$this.audioDom.currentTime = (l / (parent.offsetWidth-dom.offsetWidth))*$this.obj.totalTime
+										console.log($this.obj);
+									}
+								}else if(mark = "volume"){
+									dom.style.left = l +"px";
+									
+										$this.audioDom.volume = (l / (parent.offsetWidth-dom.offsetWidth))
+										console.log($this.obj);
+									
+								}
+							}
+						}
+						dom.onmousedown = function(){
+							document.onmousemove = function(e){
+								if($this.audioDom.oncanplaythrough){
+									var e = e || event;
+									var x = getXY().x
+									var l = x - parent.offsetLeft - dom.offsetWidth/2;
+									l = l<=0 ?  0 : l;
+									if(l >= parent.offsetWidth - dom.offsetWidth) l =  parent.offsetWidth - dom.offsetWidth 
+									if(mark == "jindu"){
+										dom.style.left = l +"px";
+										if($this.audioDom.currentTime<$this.obj.totalTime){
+											$this.audioDom.currentTime = (l / (parent.offsetWidth-dom.offsetWidth))*$this.obj.totalTime;
+											//拖动中若正在播放则暂停
+											if(!$this.audioDom.paused){
+												$this.audioDom.pause()
+											}
+											console.log($this.obj.playTime);
+										}
+										
+									}else if(mark = "volume"){
+											dom.style.left = l +"px";
+											$this.audioDom.volume = (l / (parent.offsetWidth-dom.offsetWidth))
+											console.log($this.obj);
+										
+									}
+									
+								}
+								
+							}
+							document.onmouseup = function(){
+								document.onmouseup = null;
+								document.onmousemove = null;
+								//释放鼠标播放
+								if($this.audioDom.paused){
+									$this.audioDom.play()
+									
+								}
+							}
+						}
+					}
+				}
+				//格式化日期
+				json.format = function(time){
+					var m = Math.floor(time / 60);
+					var s = Math.floor(time % 60);
+					if(m<10)m = "0"+m;
+					if(s<10)s = "0"+s;
+					return m +":"+s;
+				};
+				
+				//将this绑定到json上否则指向 {} ------------es5支持 ie9+
+				return {
+					play:json.play.bind(json),
+					volume:json.volume.bind(json),
+//					stop:json.stop.bind(json),
+					stopVolome:json.stopVolome.bind(json),
+					add:json.add.bind(json),
+					prev:json.prev.bind(json),
+					next:json.next.bind(json),
+					playindex:json.playindex.bind(json),
+					event:json.event.bind(json),
+					ended:json.ended.bind(json),
+					playIndex:json.playIndex,
+					drag:json.drag.bind(json),
+				};
+			})();
+			//音乐文件信息
+			window.onload = function(){
+
+				
+				//追加音乐文件
+				MusicPlayer.add(arr);
+				//初始化声音
+				MusicPlayer.volume(function(){
+					$("volume").style.left = this.volume *($("volume").parentElement.offsetWidth - $("volume").offsetWidth) +"px";
+				})
+				//监听当前播放完毕 执行函数
+				MusicPlayer.ended(function(){
+					//console.log(this.index)
+					seletedOn(this.index)
+				});
+				//显示音乐相关信息
+				for(var i=0,len=arr.length;i<len;i+=1){
+					var li = document.createElement("li");
+					li.innerHTML = arr[i].title;
+					li.index = i;
+					dom("musiclist").appendChild(li);
+					seletedOn(0)
+					li.onclick = function(){
+						//选择播放元素
+						seletedOn(this.index);
+					}
+					li.ondblclick = function(){
+						//调用自定义播放器中的播放方法
+						MusicPlayer.playindex(this.index);
+						//改变进度条
+						MusicPlayer.event(function(mark){
+							jinDu.call(this,mark);
+						});
+					}
+				};
+				
+				$('play').onclick = function(){
+					var $this = this;
+					MusicPlayer.play(function(mark){
+						if(mark){
+							$this.innerHTML = "播放";
+						}else{
+							$this.innerHTML = "暂停";
+						}
+					},function(){
+						//改变进度条
+						MusicPlayer.event(function(){
+							jinDu.call(this);
+						});
+						//console.log(this.obj)
+					});
+				};
+//				$("stop").onclick = function(){
+//					MusicPlayer.stop();
+//				};
+				$("next").onclick = function(){
+					MusicPlayer.next(function(index){
+						seletedOn(index);
+						$('play').innerHTML = "暂停";
+					});
+					MusicPlayer.event(function(mark){
+						//改变进度条
+						jinDu.call(this,mark);
+					});
+				};
+				$("prev").onclick = function(){
+					MusicPlayer.prev(function(index){
+						seletedOn(index);
+						$('play').innerHTML = "暂停";
+					});
+					MusicPlayer.event(function(mark){
+						//改变进度条
+						jinDu.call(this,mark);
+					});
+				};
+				$("stopVolome").onclick = function(){
+					var $this = this;
+					MusicPlayer.stopVolome(function(mark){
+						$this.innerHTML = mark ? "取消静音" :"静音";
+						$("volume").style.left = mark ? 0:this.audioDom.volume *($("volume").parentElement.offsetWidth - $("volume").offsetWidth) +"px"
+					});
+				};
+				MusicPlayer.drag($("drag"),"jindu")
+				MusicPlayer.drag($("volume"),"volume")
+			}
+			//选中当前元素
+			function seletedOn(index){
+				var li = dom("musiclist").children;
+				for (var i = 0; i < li.length; i++) {
+					li[i].className = "";
+				}
+				li[index].className = "on";
+			}
+			function $(id){
+				return document.getElementById(id);
+			}
+			//获取css属性
+			function getStyle(dom,attr){
+				return window.getComputedStyle ? getComputedStyle(dom,null)[attr] :dom.currentStyle[attr];
+			}
+			//显示进度条进度
+			function jinDu(mark){
+				var totalWidth =parseInt(getStyle($("warp"),"width"))  - parseInt(getStyle($("drag"),"width"));
+				if(mark == "time"){
+					$("drag").style.left = ((this.playTime / this.totalTime))*totalWidth  + "px";
+					$("time1").innerHTML =this.fPlayTime;
+				}else if(mark == "play"){
+					$("time").innerHTML = this.fTime;
+				}else if(!mark){
+					$("drag").style.left = ((this.playTime / this.totalTime))*totalWidth  + "px";
+					$("time1").innerHTML =this.fPlayTime;
+					$("time").innerHTML = this.fTime;
+				}
+			}
+		</script>
+	</body>
+</html>
